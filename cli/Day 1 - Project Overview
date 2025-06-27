@@ -1,0 +1,211 @@
+API Builder: Architecture and Implementation Review
+
+📘 Table of Contents
+
+Chapter	Title	Description
+1	Introduction	Overview of the goal and what we built
+2	Project Initialization	Setting up the architecture and baseline tools
+3	CLI Token Auth System	Handling login, bearer tokens, and environment variables
+4	OpenAPI Parsing & Endpoint Generation	Automating SDK wrapper generation from OpenAPI JSON
+5	CLI Design: Modular Commands	Separating system logic from API endpoint logic
+6	Query Engine with Dependency Resolution	Smart CLI to resolve endpoint dependencies automatically
+7	Pagination and Data Fetching	Fetching across pages with defaults and loops
+8	Results and Next Steps	Summary and where to go from here
+
+
+⸻
+
+Chapter 1: Introduction
+
+The goal of this project is to build a CLI-driven tool that acts as a local API assistant:
+	•	Parses any OpenAPI file
+	•	Generates usable Python functions (endpoint wrappers)
+	•	Prompts the user through an intelligent CLI to navigate endpoints, handle required arguments, and output responses
+	•	Minimizes boilerplate, maximizes reuse
+
+The development was done using CursorAI as a programming partner and Copilot, with the goal to have this tool also usable and expandable by non-expert developers.
+
+⸻
+
+Chapter 2: Project Initialization
+
+Purpose
+
+Establish the baseline architecture with a clean, testable, and automated development environment.
+
+Tasks
+	•	Created api-central/ folder structure
+	•	Defined in pyproject.toml:
+	•	poetry for dependency management
+	•	typer, pydantic-settings, openapi-python-client, etc.
+	•	Set up .env.example and CI/CD with lint/test/type check
+
+Obstacles
+	•	Initial TOML file had syntax errors and outdated dependency formats
+	•	Poetry install required pinning to Python 3.12 and correcting deprecated config sections
+
+Outcome
+	•	Successfully launched with lintable, type-safe dev environment
+	•	Cursor-ready scaffolding for future scripts
+
+⸻
+
+Chapter 3: CLI Token Auth System
+
+Purpose
+
+Handle authentication via username/password → bearer token, and securely store it for reuse.
+
+Features
+	•	CLI auth get-token command
+	•	Uses requests.post() to get bearer token
+	•	Saves token to ~/.tattle-cli/credentials.json
+	•	All API calls use get_saved_token() helper
+
+Obstacles
+	•	Ensuring .env was read before auth command ran
+	•	Resolving BaseSettings import after pydantic v2 migration
+
+Outcome
+	•	Token is successfully saved and reused
+	•	Auth CLI flow complete
+
+⸻
+
+Chapter 4: OpenAPI Parsing & Endpoint Generation
+
+Purpose
+
+Auto-generate Python wrapper functions for each endpoint in the OpenAPI file.
+
+Features
+	•	Script: scripts/generate_endpoints.py
+	•	Parses openai.json
+	•	Sorts endpoints by base path (e.g. merchants.py, locations.py)
+	•	Function names generated as get_path_variable_safe_names()
+	•	Includes summary as a docstring for future UI use
+
+Obstacles
+	•	Duplicated functions in same file caused syntax crashes (e.g. duplicate def merchants())
+	•	Missing parentheses, unclosed code blocks
+
+Fixes
+	•	De-duplicated functions by keying per file + function name
+	•	Cleaned variable interpolation
+
+Outcome
+	•	All valid GET endpoints converted to Python function wrappers
+	•	Output files clean and syntax-safe
+
+⸻
+
+Chapter 5: CLI Design: Modular Commands
+
+Purpose
+
+Separate CLI interface logic from API wrappers.
+
+Features
+	•	CLI commands in cli/commands/
+	•	API wrappers in cli/endpoints/gettattle/
+	•	main.py wires CLI commands to Typer groups
+
+Obstacles
+	•	Originally tried to write CLI command logic directly in wrappers (mixed concerns)
+	•	Cursor file routing required strict separation
+
+Outcome
+	•	All CLI commands are just interface prompts
+	•	API calls only happen in wrappers
+
+⸻
+
+Chapter 6: Query Engine with Dependency Resolution
+
+Purpose
+
+Allow user to pick any endpoint and have CLI smartly resolve all required parameters.
+
+Features
+	•	Command: system query-api
+	•	Parses OpenAPI spec
+	•	Lists endpoints sorted by required param count
+	•	Checks context for each required param
+	•	If missing, identifies endpoint that returns that param and auto-calls it
+	•	Prompts user to pick returned values (e.g. merchantId)
+	•	Stores values in ~/.tattle-cli/context.json
+
+Obstacles
+	•	Missing or broken token caused 401s
+	•	Some endpoints had malformed Python wrappers due to bad generation
+
+Fixes
+	•	Regenerated wrappers safely
+	•	Added logic to skip or auto-default Page and PageSize
+
+Outcome
+	•	Able to query /locations → waterfall call /merchants to get merchantId
+	•	Smart fallback: stored → resolved → prompted
+
+⸻
+
+Chapter 7: Pagination and Data Fetching
+
+Purpose
+
+Support auto-fetching full datasets across paginated endpoints.
+
+Features
+	•	Defaults:
+	•	Page = 1
+	•	PageSize = 50
+	•	Looks for hasNextPage in response
+	•	Repeats call until hasNextPage = false
+	•	Aggregates all data[] across pages
+
+Obstacles
+	•	None — logic layered cleanly on top of param resolution
+
+Outcome
+	•	Full /locations dataset retrieved in a single CLI run
+	•	Works with any paginated endpoint
+
+⸻
+
+Chapter 8: Results and Next Steps
+
+Achievements
+	•	Tokenized, secure CLI flow
+	•	Smart, auto-generated endpoint wrappers
+	•	Fully resolved parameter dependencies
+	•	Paginated data retrieval
+	•	Clean modular codebase (CLI ⬄ endpoint ⬄ context)
+
+Next Priorities
+	•	Interactive field filtering (choose which keys from the JSON to output)
+	•	Export CLI output to CSV/JSON
+	•	Detect nested dependencies across paths (e.g. location → merchant → group)
+	•	Improve auto-discovery of which endpoints return which fields
+	•	Add POST endpoint support
+	•	Group endpoints in CLI via tag or resource
+
+⸻
+
+Final Reflection
+
+What Worked Well
+	•	CursorAI was an excellent partner for iterative prompt-driven dev
+	•	The modular breakdown between endpoint, CLI, and context worked cleanly
+	•	Error messages (401, syntax) were quickly actionable
+
+What Could Improve
+	•	Initial endpoint generator lacked duplication protection
+	•	Parameter-to-endpoint resolver would benefit from a search index of fields → paths
+	•	Not all endpoints had examples in OpenAPI — consider adding mock data for better CLI prompt options
+
+Suggested Improvement
+	•	Add a metadata.json registry that maps known parameters (e.g. merchantId) to safe endpoints (e.g. /merchants) to skip inference
+
+⸻
+
+End of Report. Resume with: poetry run python cli/main.py system query-api
