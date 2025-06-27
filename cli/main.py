@@ -1,10 +1,12 @@
 import typer
 from cli.commands import example
+from cli.commands import auth
 
 app = typer.Typer(help="CLI for interacting with the generated API client.")
 
-# Register subcommands
+app.add_typer(auth.auth_app, name="auth")
 app.add_typer(example.example_app, name="example")
+
 
 if __name__ == "__main__":
     app()
