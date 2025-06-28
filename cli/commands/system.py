@@ -133,7 +133,7 @@ def resolve_param_value(name, openapi, date_formats):
 
 
 @system_app.command()
-def query_api():
+def query_api(endpoint: str = typer.Argument(None, help="API endpoint path (e.g., /merchants, /locations)")):
     spec_path = Path("openapi/openai.json")
     with open(spec_path) as f:
         openapi = json.load(f)
@@ -141,10 +141,18 @@ def query_api():
     date_formats = extract_date_param_formats(openapi)
 
     endpoints = list_available_endpoints()
-    path = typer.prompt(
-        "Which endpoint?",
-        type=click.Choice(list(endpoints.keys()))
-    )
+    
+    if endpoint:
+        if endpoint not in endpoints:
+            typer.echo(f"❌ Invalid endpoint: {endpoint}")
+            typer.echo(f"Available endpoints: {', '.join(endpoints.keys())}")
+            raise typer.Exit(1)
+        path = endpoint
+    else:
+        path = typer.prompt(
+            "Which endpoint?",
+            type=click.Choice(list(endpoints.keys()))
+        )
 
     method_data = endpoints[path]
     required_params = get_param_names(method_data)

@@ -4,17 +4,9 @@ def locations(params: dict = None) -> dict:
     """
     Get paginated locations
     """
-    import requests
-    from cli.config import settings, get_saved_token
+    from cli.utils.api_client import make_api_request
 
-    url = f"{settings.api_base_url}/locations"
-    headers = {
-        "Authorization": f"Bearer {get_saved_token()}",
-        "Content-Type": "application/json"
-    }
-
-    response = requests.get(url, headers=headers, params=params or {})
-    response.raise_for_status()
+    response = make_api_request("GET", "/locations", params=params)
     return response.json()
 
 def locations_locationId(params: dict = None) -> dict:
