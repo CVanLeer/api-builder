@@ -85,8 +85,14 @@ def select_from_response(response, param_name: str, endpoint: str) -> object | N
                     f"[yellow]Showing first 20 of {len(data)} items[/yellow]"
                 )
             while True:
+                max_idx = min(len(data) - 1, 19)
+                row_prompt = (
+                    "Enter row number (0-"
+                    + str(max_idx)
+                    + ")"
+                )
                 choice = Prompt.ask(
-                    f"Enter row number (0-{min(len(data)-1, 19)})",
+                    row_prompt,
                     default="0"
                 )
                 try:
@@ -105,7 +111,9 @@ def select_from_response(response, param_name: str, endpoint: str) -> object | N
                             )
                             return None
                 except ValueError:
-                    console.print("[red]Please enter a valid number[/red]")
+                    console.print(
+                        "[red]Please enter a valid number[/red]"
+                    )
         else:
             for idx, item in enumerate(data[:20]):
                 console.print(f"{idx}: {item}")
@@ -187,7 +195,9 @@ def resolve_parameter_with_dependency(
         selected_provider in analyzer.paths and
         'get' in analyzer.paths[selected_provider]
     ):
-        provider_params_info = analyzer.paths[selected_provider]['get'].get('parameters', [])
+        provider_params_info = analyzer.paths[selected_provider]['get'].get(
+            'parameters', []
+        )
     for dep_param in provider_params_info:
         dep_param_name = dep_param['name']
         if dep_param.get('required', False):
@@ -265,6 +275,10 @@ def query_api():
         p['name'] for p in endpoints[selected_endpoint].get('parameters', [])
         if p.get('required', False)
     ]
+    optional_param_defs = [
+        p for p in endpoints[selected_endpoint].get('parameters', [])
+        if not p.get('required', False)
+    ]
     execution_plan = analyzer.get_execution_plan(
         selected_endpoint, required_param_names
     )
@@ -286,6 +300,7 @@ def query_api():
             total=None
         )
         param_defs = endpoints[selected_endpoint].get('parameters', [])
+        # Prompt for required params
         for param in param_defs:
             if param.get('required', False):
                 progress.update(
@@ -302,6 +317,29 @@ def query_api():
                 )
                 if value is not None:
                     endpoint_params[param['name']] = value
+        # Prompt for optional params
+        if optional_param_defs:
+            if Confirm.ask("Would you like to add optional parameters?"):
+                for param in optional_param_defs:
+                    param_name = param['name']
+                    param_desc = param.get('description', '')
+                    prompt_text = (
+                        f"Enter value for optional param '{param_name}'"
+                    )
+                    if param_desc:
+                        prompt_text += f" ({param_desc})"
+                    value = Prompt.ask(prompt_text, default="")
+                    if value:
+                        endpoint_params[param_name] = value
+        # Show all params and confirm
+        console.print("\n[bold]Parameters to be used:[/bold]")
+        param_table = Table("Parameter", "Value")
+        for k, v in endpoint_params.items():
+            param_table.add_row(k, str(v))
+        console.print(param_table)
+        if not Confirm.ask("Proceed with these parameters?"):
+            console.print("[red]Aborted by user.[/red]")
+            return
         progress.update(main_task, description="Executing endpoint...")
         all_results = []
         page = endpoint_params.get('Page', endpoint_params.get('page', 1))
