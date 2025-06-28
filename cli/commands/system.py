@@ -86,11 +86,7 @@ def select_from_response(response, param_name: str, endpoint: str) -> object | N
                 )
             while True:
                 max_idx = min(len(data) - 1, 19)
-                row_prompt = (
-                    "Enter row number (0-"
-                    + str(max_idx)
-                    + ")"
-                )
+                row_prompt = "Enter row number (0-{})".format(max_idx)
                 choice = Prompt.ask(
                     row_prompt,
                     default="0"
@@ -337,6 +333,52 @@ def query_api():
         for k, v in endpoint_params.items():
             param_table.add_row(k, str(v))
         console.print(param_table)
+
+        # Approval loop
+        approved_params = {}
+        param_keys = list(endpoint_params.keys())
+        approve_all = False
+        i = 0
+        while i < len(param_keys):
+            k = param_keys[i]
+            v = endpoint_params[k]
+            if approve_all:
+                approved_params[k] = v
+                i += 1
+                continue
+            approve_prompt = (
+                f"Approve {k}={v}? (Y/N or 'all' to approve all): "
+            )
+            resp = Prompt.ask(approve_prompt, default="Y").strip().lower()
+            if resp == "all":
+                approve_all = True
+                approved_params[k] = v
+                i += 1
+                continue
+            if resp in ("y", "yes", ""):  # default is yes
+                approved_params[k] = v
+                i += 1
+            else:
+                # Try to get type/format from OpenAPI param definition
+                param_def = next(
+                    (p for p in param_defs if p["name"] == k), None
+                )
+                param_type = param_def.get("type") if param_def else "string"
+                param_format = param_def.get("format") if param_def else ""
+                type_str = param_type
+                if param_format:
+                    type_str += f" ({param_format})"
+                update_prompt = f"Updated {k} [{type_str}]: "
+                new_val = Prompt.ask(update_prompt, default=str(v))
+                endpoint_params[k] = new_val
+                # Do not increment i, re-approve this param
+
+        # Final confirmation
+        console.print("\n[bold]Final parameters to be used:[/bold]")
+        final_table = Table("Parameter", "Value")
+        for k, v in approved_params.items():
+            final_table.add_row(k, str(v))
+        console.print(final_table)
         if not Confirm.ask("Proceed with these parameters?"):
             console.print("[red]Aborted by user.[/red]")
             return
