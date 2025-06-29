@@ -86,7 +86,7 @@ def select_from_response(response, param_name: str, endpoint: str) -> object | N
                 )
             while True:
                 max_idx = min(len(data) - 1, 19)
-                row_prompt = "Enter row number (0-{})".format(max_idx)
+                row_prompt = f"Enter row number (0-{max_idx})"
                 choice = Prompt.ask(
                     row_prompt,
                     default="0"
@@ -244,17 +244,19 @@ def query_api():
         key=lambda x: len(x[1].get('parameters', []))
     )
     table = Table(title="Available API Endpoints")
+    table.add_column("#", style="magenta")
     table.add_column("Endpoint", style="cyan")
     table.add_column("Method", style="green")
     table.add_column("Summary", style="white")
     table.add_column("Required Params", style="yellow")
     endpoint_list = []
-    for endpoint, details in sorted_endpoints:
+    for idx, (endpoint, details) in enumerate(sorted_endpoints):
         params = [
             p['name'] for p in details.get('parameters', [])
             if p.get('required', False)
         ]
         table.add_row(
+            str(idx),
             endpoint,
             'GET',
             details.get('summary', 'No description')[:50],
@@ -271,10 +273,6 @@ def query_api():
         p['name'] for p in endpoints[selected_endpoint].get('parameters', [])
         if p.get('required', False)
     ]
-    optional_param_defs = [
-        p for p in endpoints[selected_endpoint].get('parameters', [])
-        if not p.get('required', False)
-    ]
     execution_plan = analyzer.get_execution_plan(
         selected_endpoint, required_param_names
     )
@@ -285,117 +283,141 @@ def query_api():
             console.print(
                 f"  {idx + 1}. {endpoint} -> {next_ep}"
             )
+    
+    # Collect parameters OUTSIDE the Progress context
+    endpoint_params = {}
+    param_defs = endpoints[selected_endpoint].get('parameters', [])
+    # Collect parameter values: prefer stored, then default
+    for param in param_defs:
+        param_name = param['name']
+        value = get_value(param_name)
+        if value is None:
+            if param.get('required', False):
+                # Do not pass progress/main_task here to avoid
+                # progress bar before approval
+                value = resolve_parameter_with_dependency(
+                    param_name,
+                    param,
+                    analyzer,
+                    selected_endpoint
+                )
+            else:
+                value = param.get('default', '')
+        if value is not None:
+            endpoint_params[param_name] = value
+
+    # Show all params and ask for approval BEFORE any progress bar or execution
+    console.print("\n[bold]Parameters to be used:[/bold]")
+    param_table = Table("Parameter", "Value")
+    for k, v in endpoint_params.items():
+        param_table.add_row(k, str(v))
+    console.print(param_table)
+
+    # Approve all prompt
+    approve_all_prompt = (
+        "Approve All? Y/N (type all to approve all): "
+    )
+    param_keys = list(endpoint_params.keys())
+    approved_params = {}
+    approve_all = False
+    
+    while True:
+        resp = Prompt.ask(approve_all_prompt, default="Y").strip().lower()
+        print(f"[DEBUG] User input for approve all: '{resp}'")  # Debug print
+        if resp in ("y", "yes", "all", ""):
+            approved_params = endpoint_params.copy()
+            break
+        elif resp in ("n", "no"):
+            # enter per-parameter approval loop
+            i = 0
+            while i < len(param_keys):
+                k = param_keys[i]
+                v = endpoint_params[k]
+                if approve_all:
+                    approved_params[k] = v
+                    i += 1
+                    continue
+                approve_prompt = (
+                    f"Approve {k}={v}? (Y/N, or 'all' to approve all): "
+                )
+                resp2 = Prompt.ask(
+                    approve_prompt,
+                    default="Y"
+                ).strip().lower()
+                print(
+                    f"[DEBUG] User input for {k}: '{resp2}'"
+                )  # Debug print
+                if resp2 == "all":
+                    approve_all = True
+                    approved_params[k] = v
+                    i += 1
+                    continue
+                if resp2 in ("y", "yes", ""):
+                    approved_params[k] = v
+                    i += 1
+                elif resp2 in ("n", "no"):
+                    # Try to get type/format from OpenAPI param definition
+                    param_def = next(
+                        (p for p in param_defs if p["name"] == k), None
+                    )
+                    param_type = param_def.get("type") if param_def else "string"
+                    param_format = param_def.get("format") if param_def else ""
+                    type_str = param_type
+                    if param_format:
+                        type_str += f" ({param_format})"
+                    update_prompt = f"Updated {k} [{type_str}]: "
+                    new_val = Prompt.ask(
+                        update_prompt,
+                        default=str(v)
+                    )
+                    endpoint_params[k] = new_val
+                    # Do not increment i, re-approve this param
+                else:
+                    print(
+                        f"[DEBUG] Invalid input for {k}: '{resp2}'"
+                    )
+                    continue  # re-prompt for this param
+            break
+        else:
+            print(f"[DEBUG] Invalid input for approve all: '{resp}'")
+            continue  # re-prompt for approve all
+
+    # Final confirmation
+    console.print("\n[bold]Final parameters to be used:[/bold]")
+    final_table = Table("Parameter", "Value")
+    for k, v in approved_params.items():
+        final_table.add_row(k, str(v))
+    console.print(final_table)
+    if not Confirm.ask("Proceed with these parameters?"):
+        console.print("[red]Aborted by user.[/red]")
+        return
+
+    # Only now start the progress bar and execution
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         console=console
     ) as progress:
-        endpoint_params = {}
         main_task = progress.add_task(
             f"Resolving parameters for {selected_endpoint}...",
             total=None
         )
-        param_defs = endpoints[selected_endpoint].get('parameters', [])
-        # Prompt for required params
-        for param in param_defs:
-            if param.get('required', False):
-                progress.update(
-                    main_task,
-                    description=f"Resolving {param['name']}..."
-                )
-                value = resolve_parameter_with_dependency(
-                    param['name'],
-                    param,
-                    analyzer,
-                    selected_endpoint,
-                    progress,
-                    main_task
-                )
-                if value is not None:
-                    endpoint_params[param['name']] = value
-        # Prompt for optional params
-        if optional_param_defs:
-            if Confirm.ask("Would you like to add optional parameters?"):
-                for param in optional_param_defs:
-                    param_name = param['name']
-                    param_desc = param.get('description', '')
-                    prompt_text = (
-                        f"Enter value for optional param '{param_name}'"
-                    )
-                    if param_desc:
-                        prompt_text += f" ({param_desc})"
-                    value = Prompt.ask(prompt_text, default="")
-                    if value:
-                        endpoint_params[param_name] = value
-        # Show all params and confirm
-        console.print("\n[bold]Parameters to be used:[/bold]")
-        param_table = Table("Parameter", "Value")
-        for k, v in endpoint_params.items():
-            param_table.add_row(k, str(v))
-        console.print(param_table)
-
-        # Approval loop
-        approved_params = {}
-        param_keys = list(endpoint_params.keys())
-        approve_all = False
-        i = 0
-        while i < len(param_keys):
-            k = param_keys[i]
-            v = endpoint_params[k]
-            if approve_all:
-                approved_params[k] = v
-                i += 1
-                continue
-            approve_prompt = (
-                f"Approve {k}={v}? (Y/N or 'all' to approve all): "
-            )
-            resp = Prompt.ask(approve_prompt, default="Y").strip().lower()
-            if resp == "all":
-                approve_all = True
-                approved_params[k] = v
-                i += 1
-                continue
-            if resp in ("y", "yes", ""):  # default is yes
-                approved_params[k] = v
-                i += 1
-            else:
-                # Try to get type/format from OpenAPI param definition
-                param_def = next(
-                    (p for p in param_defs if p["name"] == k), None
-                )
-                param_type = param_def.get("type") if param_def else "string"
-                param_format = param_def.get("format") if param_def else ""
-                type_str = param_type
-                if param_format:
-                    type_str += f" ({param_format})"
-                update_prompt = f"Updated {k} [{type_str}]: "
-                new_val = Prompt.ask(update_prompt, default=str(v))
-                endpoint_params[k] = new_val
-                # Do not increment i, re-approve this param
-
-        # Final confirmation
-        console.print("\n[bold]Final parameters to be used:[/bold]")
-        final_table = Table("Parameter", "Value")
-        for k, v in approved_params.items():
-            final_table.add_row(k, str(v))
-        console.print(final_table)
-        if not Confirm.ask("Proceed with these parameters?"):
-            console.print("[red]Aborted by user.[/red]")
-            return
         progress.update(main_task, description="Executing endpoint...")
         all_results = []
-        page = endpoint_params.get('Page', endpoint_params.get('page', 1))
+        page = approved_params.get('Page', approved_params.get('page', 1))
         has_more = True
         while has_more:
-            if 'Page' in endpoint_params:
-                endpoint_params['Page'] = page
-            elif 'page' in endpoint_params:
-                endpoint_params['page'] = page
+            if 'Page' in approved_params:
+                approved_params['Page'] = page
+            elif 'page' in approved_params:
+                approved_params['page'] = page
             progress.update(
                 main_task,
-                description=f"Fetching page {page}..."
+                description=(
+                    f"Fetching page {page}..."
+                )
             )
-            response = execute_endpoint(selected_endpoint, endpoint_params)
+            response = execute_endpoint(selected_endpoint, approved_params)
             if response:
                 if isinstance(response, dict):
                     data = response.get('data', response)
@@ -413,7 +435,9 @@ def query_api():
             else:
                 break
         progress.update(main_task, description="✅ Complete!")
-    console.print(f"\n[green]Results ({len(all_results)} items):[/green]")
+    console.print(
+        f"\n[green]Results ({len(all_results)} items):[green]"
+    )
     console.print(json.dumps(all_results, indent=2))
     if Confirm.ask("Save results to file?"):
         filename = Prompt.ask("Filename", default="results.json")
