@@ -1,12 +1,11 @@
 """Configuration and token management for the CLI app."""
 from pydantic_settings import BaseSettings
-from pathlib import Path
-import json
-import os
 from typing import Optional
 import logging
 from cryptography.fernet import Fernet
 import base64
+from datetime import datetime
+from cli.state import state_manager
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +18,12 @@ class Settings(BaseSettings):
     auth_email: Optional[str] = ""
     auth_password_encrypted: Optional[str] = ""
     encryption_key: Optional[str] = ""
+    token_last_updated: Optional[str] = ""
 
     class Config:
         """Pydantic config for environment file."""
         env_file = ".env"
+        extra = "ignore"  # Allow extra fields in .env file
 
 
 settings = Settings()
@@ -30,12 +31,14 @@ settings = Settings()
 
 def get_or_create_encryption_key() -> bytes:
     """Get or create an encryption key for storing credentials."""
-    if settings.encryption_key:
-        return base64.urlsafe_b64decode(settings.encryption_key)
+    key_str = state_manager.get_encryption_key()
+    if key_str:
+        return base64.urlsafe_b64decode(key_str)
     
-    # Generate new key if not exists
+    # Generate new key
     key = Fernet.generate_key()
-    update_env_file("ENCRYPTION_KEY", base64.urlsafe_b64encode(key).decode())
+    key_str = base64.urlsafe_b64encode(key).decode()
+    state_manager.save_encryption_key(key_str)
     return key
 
 
@@ -53,59 +56,39 @@ def decrypt_password(encrypted_password: str) -> str:
     return f.decrypt(encrypted_password.encode()).decode()
 
 
-def update_env_file(key: str, value: str):
-    """Update or add a key-value pair in the .env file."""
-    env_path = Path(".env")
-    lines = []
-    key_found = False
-    
-    if env_path.exists():
-        with open(env_path, "r") as f:
-            for line in f:
-                if line.strip().startswith(f"{key}="):
-                    lines.append(f"{key}={value}\n")
-                    key_found = True
-                else:
-                    lines.append(line)
-    
-    if not key_found:
-        lines.append(f"{key}={value}\n")
-    
-    with open(env_path, "w") as f:
-        f.writelines(lines)
-    
-    # Reload settings
-    global settings
-    settings = Settings()
-
-
 def get_saved_token() -> str:
-    """Retrieve the saved access token from environment."""
-    return settings.access_token or ""
+    """Retrieve the saved access token."""
+    return state_manager.get_token() or ""
 
 
 def save_token(token: str):
-    """Save the access token to environment file."""
-    update_env_file("ACCESS_TOKEN", token)
+    """Save the access token and update timestamp."""
+    state_manager.save_token(token)
+
+
+def get_token_last_updated() -> Optional[datetime]:
+    """Get the last updated timestamp for the token."""
+    return state_manager.get_token_last_updated()
 
 
 def save_credentials(email: str, password: str):
-    """Save email and encrypted password to environment file."""
+    """Save email and encrypted password."""
     encrypted_password = encrypt_password(password)
-    update_env_file("AUTH_EMAIL", email)
-    update_env_file("AUTH_PASSWORD_ENCRYPTED", encrypted_password)
+    state_manager.save_credentials(email, encrypted_password)
 
 
 def get_saved_credentials() -> tuple[str, str]:
     """Get saved email and decrypted password."""
-    if not settings.auth_email or not settings.auth_password_encrypted:
+    email, encrypted_password = state_manager.get_credentials()
+    if not email or not encrypted_password:
         return "", ""
-    
     try:
-        password = decrypt_password(settings.auth_password_encrypted)
-        return settings.auth_email, password
+        password = decrypt_password(encrypted_password)
+        return email, password
     except Exception as e:
-        logger.error(f"Failed to decrypt stored password: {e}")
+        logger.error(
+            f"Failed to decrypt stored password: {e}"
+        )
         return "", ""
 
 

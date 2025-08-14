@@ -3,6 +3,8 @@ import typer
 from cli.commands import example
 from cli.commands import auth
 from cli.commands import system
+from cli.config import get_token_last_updated, auto_authenticate
+from datetime import datetime, timedelta
 
 
 app = typer.Typer(help="CLI for interacting with the generated API client.")
@@ -14,6 +16,11 @@ app.add_typer(system.system_app, name="system")
 
 def main():
     """Run the CLI application."""
+    # Global token refresh logic
+    last_updated = get_token_last_updated()
+    if not last_updated or (datetime.utcnow() - last_updated > timedelta(hours=24)):
+        print("[cyan]Refreshing authorization token...[/cyan]")
+        auto_authenticate()
     app()
 
 

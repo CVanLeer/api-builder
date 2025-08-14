@@ -8,4 +8,4 @@ cd "$(dirname "$0")"
 clear
 
 # Run the interactive terminal
-python interactive_terminal.py
+poetry run python interactive_terminal.py

@@ -1,0 +1,262 @@
+[
+  {
+    "id": 5362,
+    "label": "Peachtree",
+    "slug": "whatsyourgusto9",
+    "merchantId": 2176,
+    "managerId": 1441771,
+    "active": true,
+    "address": {
+      "lineOne": "1935 Peachtree Rd",
+      "lineTwo": null,
+      "city": "Atlanta",
+      "state": "GA",
+      "zip": "30309",
+      "timezone": "America/New_York"
+    },
+    "externalId": "9",
+    "phoneNumber": null,
+    "localizationsId": 18,
+    "isFranchise": false
+  },
+  {
+    "id": 5363,
+    "label": "Ponce",
+    "slug": "whatsyourgusto6",
+    "merchantId": 2176,
+    "managerId": 2168223,
+    "active": true,
+    "address": {
+      "lineOne": "782 Ponce De Leon Ave NE",
+      "lineTwo": null,
+      "city": "Atlanta",
+      "state": "GA",
+      "zip": "30306",
+      "timezone": "America/New_York"
+    },
+    "externalId": "6",
+    "phoneNumber": null,
+    "localizationsId": 18,
+    "isFranchise": false
+  },
+  {
+    "id": 5364,
+    "label": "Decatur",
+    "slug": "whatsyourgusto3",
+    "merchantId": 2176,
+    "managerId": 2655693,
+    "active": true,
+    "address": {
+      "lineOne": "1545 Church St",
+      "lineTwo": "310",
+      "city": "Decatur",
+      "state": "GA",
+      "zip": "30033",
+      "timezone": "America/New_York"
+    },
+    "externalId": "3",
+    "phoneNumber": null,
+    "localizationsId": 18,
+    "isFranchise": false
+  },
+  {
+    "id": 5365,
+    "label": "West Midtown",
+    "slug": "whatsyourgusto7",
+    "merchantId": 2176,
+    "managerId": 1477767,
+    "active": true,
+    "address": {
+      "lineOne": "530 17th St NW",
+      "lineTwo": null,
+      "city": "Atlanta",
+      "state": "GA",
+      "zip": "30363",
+      "timezone": "America/New_York"
+    },
+    "externalId": "7",
+    "phoneNumber": null,
+    "localizationsId": 18,
+    "isFranchise": false
+  },
+  {
+    "id": 5366,
+    "label": "Chamblee",
+    "slug": "gusto8",
+    "merchantId": 2176,
+    "managerId": 5196928,
+    "active": true,
+    "address": {
+      "lineOne": "4945 Peachtree Blvd",
+      "lineTwo": null,
+      "city": "Chamblee",
+      "state": "GA",
+      "zip": "30071",
+      "timezone": "America/New_York"
+    },
+    "externalId": "8",
+    "phoneNumber": null,
+    "localizationsId": 18,
+    "isFranchise": false
+  },
+  {
+    "id": 5367,
+    "label": "Chastain",
+    "slug": "gusto4",
+    "merchantId": 2176,
+    "managerId": 7651647,
+    "active": true,
+    "address": {
+      "lineOne": "4365 Roswell Rd NE",
+      "lineTwo": "4371",
+      "city": "Atlanta",
+      "state": "GA",
+      "zip": "30342",
+      "timezone": "America/New_York"
+    },
+    "externalId": "4",
+    "phoneNumber": null,
+    "localizationsId": 18,
+    "isFranchise": false
+  },
+  {
+    "id": 5368,
+    "label": "Avalon",
+    "slug": "whatsyourgusto5",
+    "merchantId": 2176,
+    "managerId": 4933978,
+    "active": true,
+    "address": {
+      "lineOne": "4195 Avalon Blvd",
+      "lineTwo": null,
+      "city": "Alpharetta",
+      "state": "GA",
+      "zip": "30009",
+      "timezone": "America/New_York"
+    },
+    "externalId": "5",
+    "phoneNumber": null,
+    "localizationsId": 18,
+    "isFranchise": false
+  },
+  {
+    "id": 8144,
+    "label": "East Cobb",
+    "slug": "gusto10",
+    "merchantId": 2176,
+    "managerId": 5459356,
+    "active": true,
+    "address": {
+      "lineOne": "688 Johnson Ferry Rd",
+      "lineTwo": null,
+      "city": "Marietta",
+      "state": "GA",
+      "zip": "30068",
+      "timezone": "America/New_York"
+    },
+    "externalId": "10",
+    "phoneNumber": null,
+    "localizationsId": 18,
+    "isFranchise": false
+  },
+  {
+    "id": 46967,
+    "label": "Downtown",
+    "slug": "gusto11",
+    "merchantId": 2176,
+    "managerId": 4713615,
+    "active": true,
+    "address": {
+      "lineOne": "2 Park Pl NE",
+      "lineTwo": null,
+      "city": "Atlanta",
+      "state": "GA",
+      "zip": "30303",
+      "timezone": "America/New_York"
+    },
+    "externalId": "11",
+    "phoneNumber": null,
+    "localizationsId": 18,
+    "isFranchise": false
+  },
+  {
+    "id": 52081,
+    "label": "Buford",
+    "slug": "gusto13",
+    "merchantId": 2176,
+    "managerId": 1150814,
+    "active": true,
+    "address": {
+      "lineOne": "2925 Buford Dr",
+      "lineTwo": "Building 1700",
+      "city": "Buford",
+      "state": "GA",
+      "zip": "30519",
+      "timezone": "America/New_York"
+    },
+    "externalId": "13",
+    "phoneNumber": null,
+    "localizationsId": 18,
+    "isFranchise": false
+  },
+  {
+    "id": 55854,
+    "label": "Tucker",
+    "slug": "gusto14",
+    "merchantId": 2176,
+    "managerId": 1689756,
+    "active": true,
+    "address": {
+      "lineOne": "4650 Hugh Howell Rd",
+      "lineTwo": "Building 400",
+      "city": "Tucker",
+      "state": "GA",
+      "zip": "30084",
+      "timezone": "America/New_York"
+    },
+    "externalId": "14",
+    "phoneNumber": null,
+    "localizationsId": 18,
+    "isFranchise": false
+  },
+  {
+    "id": 62580,
+    "label": "West End",
+    "slug": "gusto15",
+    "merchantId": 2176,
+    "managerId": 1150837,
+    "active": true,
+    "address": {
+      "lineOne": "1020 White St SW",
+      "lineTwo": "r 1",
+      "city": "Atlanta",
+      "state": "GA",
+      "zip": "30310",
+      "timezone": "America/New_York"
+    },
+    "externalId": "15",
+    "phoneNumber": null,
+    "localizationsId": null,
+    "isFranchise": false
+  },
+  {
+    "id": 64838,
+    "label": "Sharpsburg",
+    "slug": "gusto16",
+    "merchantId": 2176,
+    "managerId": 7414872,
+    "active": true,
+    "address": {
+      "lineOne": "100 Fischer Marketplace Ln",
+      "lineTwo": "Suite 200",
+      "city": "Sharpsburg",
+      "state": "GA",
+      "zip": "30277",
+      "timezone": "America/New_York"
+    },
+    "externalId": "16",
+    "phoneNumber": null,
+    "localizationsId": 18,
+    "isFranchise": false
+  }
+]

@@ -10,13 +10,12 @@ functions and commands in the api-central project.
 import os
 import sys
 import subprocess
-from typing import List, Dict, Tuple
+from typing import Dict
 from rich.console import Console
 from rich.table import Table
 from rich.prompt import Prompt, Confirm
 from rich.panel import Panel
 from rich.text import Text
-from rich import print as rprint
 
 console = Console()
 
@@ -25,7 +24,7 @@ COMMANDS = {
     "Authentication": [
         {
             "name": "Get Token",
-            "command": "python -m cli.main auth get-token",
+            "command": "poetry run python -m cli.main auth get-token",
             "description": "Authenticate and retrieve a bearer token",
             "category": "auth"
         }
@@ -33,7 +32,7 @@ COMMANDS = {
     "API Queries": [
         {
             "name": "Query API",
-            "command": "python -m cli.main system query-api",
+            "command": "poetry run python -m cli.main system query-api",
             "description": "Interactive API endpoint execution with parameter resolution",
             "category": "system"
         }
@@ -41,7 +40,7 @@ COMMANDS = {
     "Examples": [
         {
             "name": "Hello Example",
-            "command": "python -m cli.main example hello",
+            "command": "poetry run python -m cli.main example hello",
             "description": "Simple greeting command (requires name parameter)",
             "category": "example",
             "params": ["name"]
@@ -50,21 +49,36 @@ COMMANDS = {
     "Utility Scripts": [
         {
             "name": "Generate Endpoints",
-            "command": "python scripts/generate_endpoints.py",
+            "command": "poetry run python scripts/generate_endpoints.py",
             "description": "Generate endpoint functions from OpenAPI spec",
             "category": "utility"
         },
         {
             "name": "Watch OpenAPI",
-            "command": "python scripts/watch_openapi.py",
+            "command": "poetry run python scripts/watch_openapi.py",
             "description": "Watch for OpenAPI spec changes and auto-regenerate",
             "category": "utility"
         },
         {
             "name": "Regenerate Client",
-            "command": "python scripts/regen_client.py",
+            "command": "poetry run python scripts/regen_client.py",
             "description": "Regenerate the API client from OpenAPI spec",
             "category": "utility"
+        }
+    ],
+    "History": [
+        {
+            "name": "Show Command History",
+            "command": "poetry run python -m cli.main system history",
+            "description": "Show recent command history",
+            "category": "history"
+        },
+        {
+            "name": "Replay Command",
+            "command": "poetry run python -m cli.main system replay",
+            "description": "Replay a command from history (requires index)",
+            "category": "history",
+            "params": ["index"]
         }
     ],
     "Direct API Endpoints": [
@@ -96,7 +110,8 @@ def show_banner():
 
 def show_commands_table():
     """Display all available commands in a formatted table."""
-    table = Table(title="Available Commands", show_header=True, header_style="bold magenta")
+    table = Table(title="Available Commands", show_header=True,
+                 header_style="bold magenta")
     table.add_column("ID", style="cyan", width=6)
     table.add_column("Category", style="green", width=15)
     table.add_column("Name", style="yellow", width=25)
@@ -120,6 +135,11 @@ def show_commands_table():
     return command_map
 
 
+def check_main_input(value):
+    """Return True if the user input is 'main' (case-insensitive)."""
+    return str(value).strip().lower() == 'main'
+
+
 def execute_command(command_info: Dict, category: str):
     """Execute a selected command."""
     console.print(f"\n[bold cyan]Executing:[/bold cyan] {command_info['name']}")
@@ -132,7 +152,10 @@ def execute_command(command_info: Dict, category: str):
         console.print("\n[yellow]This command requires parameters:[/yellow]")
         params = []
         for param in command_info['params']:
-            value = Prompt.ask(f"Enter value for '{param}'")
+            value = Prompt.ask(f"Enter value for '{param}' (or type 'main' to return)")
+            if check_main_input(value):
+                console.print("[cyan]Returning to main menu...[/cyan]")
+                return
             params.append(value)
         full_command = f"{command_info['command']} {' '.join(params)}"
     
@@ -140,13 +163,27 @@ def execute_command(command_info: Dict, category: str):
     
     try:
         # Execute the command
-        result = subprocess.run(
-            full_command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            cwd=os.path.dirname(os.path.abspath(__file__))
-        )
+        # For interactive commands, don't capture output - let them run normally
+        if any(keyword in full_command for keyword in ['query-api', 'get-token']):
+            # Interactive commands - run without capturing output
+            result = subprocess.run(
+                full_command,
+                shell=True,
+                cwd=os.path.dirname(os.path.abspath(__file__))
+            )
+            console.print(
+                f"[green]Command completed with exit code: {result.returncode}[/green]"
+            )
+            return
+        else:
+            # Non-interactive commands - capture output
+            result = subprocess.run(
+                full_command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                cwd=os.path.dirname(os.path.abspath(__file__))
+            )
         
         if result.stdout:
             console.print("[green]Output:[/green]")
@@ -157,7 +194,9 @@ def execute_command(command_info: Dict, category: str):
             console.print(result.stderr)
             
         if result.returncode != 0:
-            console.print(f"[red]Command exited with code {result.returncode}[/red]")
+            console.print(
+                f"[red]Command exited with code {result.returncode}[/red]"
+            )
             
     except Exception as e:
         console.print(f"[red]Error executing command: {e}[/red]")
@@ -167,10 +206,15 @@ def show_endpoint_details():
     """Show detailed information about available API endpoints."""
     console.print("\n[bold cyan]Available API Endpoint Modules:[/bold cyan]\n")
     
-    endpoints_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cli/endpoints/gettattle")
+    endpoints_dir = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "cli/endpoints/gettattle"
+    )
     
     if os.path.exists(endpoints_dir):
-        files = [f for f in os.listdir(endpoints_dir) if f.endswith('.py') and f != '__init__.py']
+        files = [
+            f for f in os.listdir(endpoints_dir)
+            if f.endswith('.py') and f != '__init__.py'
+        ]
         
         table = Table(show_header=True, header_style="bold magenta")
         table.add_column("Module", style="cyan", width=35)
@@ -217,8 +261,13 @@ def main():
         console.print("3. Execute a command")
         console.print("4. Clear screen")
         console.print("5. Exit")
+        console.print("6. Reset default parameters")
         
-        choice = Prompt.ask("\nSelect an option", choices=["1", "2", "3", "4", "5"], default="1")
+        choice = Prompt.ask(
+            "\nSelect an option",
+            choices=["1", "2", "3", "4", "5", "6"],
+            default="1"
+        )
         
         if choice == "1":
             console.print()
@@ -231,26 +280,24 @@ def main():
             command_map = show_commands_table()
             console.print()
             
-            command_id = Prompt.ask("Enter command ID to execute (or 'back' to return)")
-            
-            if command_id.lower() == 'back':
+            command_id = Prompt.ask(
+                "Enter command ID to execute (or 'back' or 'main' to return)"
+            )
+            if check_main_input(command_id) or command_id.lower() == 'back':
+                console.print("[cyan]Returning to main menu...[/cyan]")
                 continue
-                
             try:
                 cmd_id = int(command_id)
                 if cmd_id in command_map:
                     category, cmd_info = command_map[cmd_id]
-                    
                     # Confirm execution
                     if Confirm.ask(f"\nExecute '{cmd_info['name']}'?"):
                         execute_command(cmd_info, category)
-                        
                         # Ask if user wants to continue
                         if not Confirm.ask("\nWould you like to execute another command?"):
                             break
                 else:
                     console.print("[red]Invalid command ID[/red]")
-                    
             except ValueError:
                 console.print("[red]Please enter a valid number[/red]")
                 
@@ -261,6 +308,18 @@ def main():
         elif choice == "5":
             console.print("\n[bold green]Thank you for using API Central Interactive Terminal![/bold green]")
             break
+        
+        elif choice == "6":
+            console.print("\n[cyan]Resetting default parameters...[/cyan]")
+            result = subprocess.run(
+                "poetry run python -m cli.main system set-defaults",
+                shell=True,
+                cwd=os.path.dirname(os.path.abspath(__file__))
+            )
+            if result.returncode == 0:
+                console.print("[green]Default parameters have been reset successfully.[/green]")
+            else:
+                console.print("[red]Failed to reset default parameters.[/red]")
     
     console.print("\n[dim]Goodbye![/dim]\n")
 

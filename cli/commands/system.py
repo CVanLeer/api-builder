@@ -1,6 +1,8 @@
 import typer
-import importlib
-from cli.context import get_value, save_context
+from cli.context import (
+    get_value, save_context, save_command_to_history,
+    get_recent_commands, replay_command
+)
 from cli.dependency_analyzer import DependencyAnalyzer
 from cli.parameter_detector import ParameterDetector, ParameterType
 from pathlib import Path
@@ -9,6 +11,9 @@ from rich.console import Console
 from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Prompt, Confirm
+from datetime import datetime, timedelta
+import os
+from cli.utils.api_client import get_client
 
 system_app = typer.Typer()
 console = Console()
@@ -37,16 +42,23 @@ def get_parameter_detector() -> ParameterDetector:
 
 
 def execute_endpoint(endpoint: str, params: dict) -> dict | None:
-    """Execute an endpoint with given parameters"""
-    module_name = endpoint.strip("/").split("/")[0].replace("-", "_")
-    func_name = (
-        endpoint.strip("/").replace("/", "_")
-        .replace("{", "").replace("}", "")
-    )
+    """Execute an endpoint using the API client."""
     try:
-        mod = importlib.import_module(f"cli.endpoints.gettattle.{module_name}")
-        fn = getattr(mod, func_name)
-        return fn(params)
+        client = get_client()
+        # Map endpoint paths to API client methods
+        endpoint_mapping = {
+            "/merchants": lambda: client.merchants.get_merchants.sync(**params),
+            "/locations": lambda: client.locations.get_locations.sync(**params),
+            "/groups": lambda: client.groups.get_groups.sync(**params),
+            # ... add all other endpoints as needed
+        }
+        if endpoint in endpoint_mapping:
+            return endpoint_mapping[endpoint]()
+        else:
+            console.print(
+                f"[red]❌ Endpoint {endpoint} not implemented in client mapping[/red]"
+            )
+            return None
     except Exception as e:
         console.print(f"[red]❌ Error calling {endpoint}: {e}[/red]")
         return None
@@ -127,103 +139,152 @@ def resolve_parameter_with_dependency(
     analyzer: DependencyAnalyzer,
     endpoint: str,
     progress: Progress | None = None,
-    task_id: int | None = None
+    task_id: int | None = None,
+    _resolving_stack: set = None
 ) -> object | None:
     """Resolve a parameter using dependency analysis"""
-    detector = get_parameter_detector()
-    cached_value = get_value(param_name)
-    if cached_value:
-        if progress and task_id:
-            progress.update(
-                task_id,
-                description=(
-                    f"✅ Using cached {param_name}: {cached_value}"
-                )
-            )
-        return cached_value
-    param_type_info = detector.detect_parameter_type(param_name, param_info)
-    if param_type_info.type == ParameterType.PAGINATION:
-        if param_name.lower() == "page":
-            return 1
-        if param_name.lower() in ("pagesize", "limit", "size"):
-            return 50
-    if param_type_info.type == ParameterType.BOOLEAN:
-        return Confirm.ask(f"Value for {param_name}")
-    if param_type_info.type == ParameterType.ENUM:
-        return Prompt.ask(
-            f"Select {param_name}",
-            choices=param_type_info.enum_values
-        )
-    providers = analyzer.find_parameter_providers(param_name)
-    if providers:
-        # Sort by simplicity
-        providers.sort(key=lambda p: rank_provider(p, analyzer))
-        # Special case for merchantId - prefer /merchants
-        if param_name.lower() == 'merchantid' and '/merchants' in providers:
-            selected_provider = '/merchants'
-        else:
-            selected_provider = providers[0]
-    else:
-        if progress and task_id:
-            progress.update(
-                task_id,
-                description=(
-                    f"⚠️  No provider found for {param_name}"
-                )
-            )
+    # Initialize recursion detection stack
+    if _resolving_stack is None:
+        _resolving_stack = set()
+    
+    # Check for circular dependency
+    if param_name in _resolving_stack:
+        console.print(f"[yellow]⚠️  Circular dependency detected for {param_name}, prompting manually[/yellow]")
         manual_value = Prompt.ask(f"Enter value for {param_name}")
         save_context({param_name: manual_value})
         return manual_value
-    if progress and task_id:
-        progress.update(
-            task_id,
-            description=(
-                f"🔗 Fetching {param_name} from {selected_provider}..."
-            )
-        )
-    console.print(
-        f"\n[cyan]Calling {selected_provider} to get {param_name}...[/cyan]"
-    )
-    # Recursively resolve parameters for the provider endpoint
-    provider_params = {}
-    provider_params_info = []
-    if (
-        selected_provider in analyzer.paths and
-        'get' in analyzer.paths[selected_provider]
-    ):
-        provider_params_info = analyzer.paths[selected_provider]['get'].get(
-            'parameters', []
-        )
-    for dep_param in provider_params_info:
-        dep_param_name = dep_param['name']
-        if dep_param.get('required', False):
-            dep_value = resolve_parameter_with_dependency(
-                dep_param_name,
-                dep_param,
-                analyzer,
-                selected_provider,
-                progress,
-                task_id
-            )
-            if dep_value is not None:
-                provider_params[dep_param_name] = dep_value
-    response = execute_endpoint(selected_provider, provider_params)
-    if response:
-        value = select_from_response(response, param_name, selected_provider)
-        if value is not None:
-            save_context({param_name: value})
+    
+    # Add current parameter to resolving stack
+    _resolving_stack.add(param_name)
+    
+    try:
+        detector = get_parameter_detector()
+        cached_value = get_value(param_name)
+        if cached_value:
             if progress and task_id:
                 progress.update(
                     task_id,
                     description=(
-                        f"✅ Resolved {param_name}: {value}"
+                        f"✅ Using cached {param_name}: {cached_value}"
                     )
                 )
-            return value
-    console.print(f"[yellow]Could not auto-resolve {param_name}[/yellow]")
-    manual_value = Prompt.ask(f"Enter value for {param_name}")
-    save_context({param_name: manual_value})
-    return manual_value
+            return cached_value
+        
+        param_type_info = detector.detect_parameter_type(param_name, param_info)
+        if param_type_info.type == ParameterType.PAGINATION:
+            if param_name.lower() == "page":
+                return 1
+            if param_name.lower() in ("pagesize", "limit", "size"):
+                return 50
+        if param_type_info.type == ParameterType.BOOLEAN:
+            return Confirm.ask(f"Value for {param_name}")
+        if param_type_info.type == ParameterType.ENUM:
+            return Prompt.ask(
+                f"Select {param_name}",
+                choices=param_type_info.enum_values
+            )
+        providers = analyzer.find_parameter_providers(param_name)
+        if providers:
+            # Sort by simplicity
+            providers.sort(key=lambda p: rank_provider(p, analyzer))
+            # Special case for merchantId - prefer /merchants
+            if param_name.lower() == 'merchantid' and '/merchants' in providers:
+                selected_provider = '/merchants'
+            else:
+                selected_provider = providers[0]
+        else:
+            if progress and task_id:
+                progress.update(
+                    task_id,
+                    description=(
+                        f"⚠️  No provider found for {param_name}"
+                    )
+                )
+            manual_value = Prompt.ask(f"Enter value for {param_name}")
+            save_context({param_name: manual_value})
+            return manual_value
+        if progress and task_id:
+            progress.update(
+                task_id,
+                description=(
+                    f"🔗 Fetching {param_name} from {selected_provider}..."
+                )
+            )
+        console.print(
+            f"\n[cyan]Calling {selected_provider} to get {param_name}...[/cyan]"
+        )
+        # Recursively resolve parameters for the provider endpoint
+        provider_params = {}
+        provider_params_info = []
+        if (
+            selected_provider in analyzer.paths and
+            'get' in analyzer.paths[selected_provider]
+        ):
+            provider_params_info = analyzer.paths[selected_provider]['get'].get(
+                'parameters', []
+            )
+        for dep_param in provider_params_info:
+            dep_param_name = dep_param['name']
+            if dep_param.get('required', False):
+                dep_value = resolve_parameter_with_dependency(
+                    dep_param_name,
+                    dep_param,
+                    analyzer,
+                    selected_provider,
+                    progress,
+                    task_id,
+                    _resolving_stack
+                )
+                if dep_value is not None:
+                    provider_params[dep_param_name] = dep_value
+        response = execute_endpoint(selected_provider, provider_params)
+        if response:
+            value = select_from_response(response, param_name, selected_provider)
+            if value is not None:
+                save_context({param_name: value})
+                if progress and task_id:
+                    progress.update(
+                        task_id,
+                        description=(
+                            f"✅ Resolved {param_name}: {value}"
+                        )
+                    )
+                return value
+        console.print(f"[yellow]Could not auto-resolve {param_name}[/yellow]")
+        manual_value = Prompt.ask(f"Enter value for {param_name}")
+        save_context({param_name: manual_value})
+        return manual_value
+    finally:
+        # Clean up: remove parameter from resolving stack
+        _resolving_stack.discard(param_name)
+
+
+def set_default_dates():
+    """Set default date parameters in context"""
+    defaults = {
+        'StartDateExperiencedLocal': (
+            datetime.now() - timedelta(days=7)
+        ).strftime('%Y-%m-%d'),
+        'EndDateExperiencedLocal': datetime.now().strftime('%Y-%m-%d'),
+        'StartDate': (
+            datetime.now() - timedelta(days=7)
+        ).strftime('%Y-%m-%d'),
+        'EndDate': datetime.now().strftime('%Y-%m-%d'),
+        'StartDateUtc': (
+            datetime.now() - timedelta(days=7)
+        ).strftime('%Y-%m-%d'),
+        'EndDateUtc': datetime.now().strftime('%Y-%m-%d'),
+        'ExperienceStartDate': (
+            datetime.now() - timedelta(days=7)
+        ).strftime('%Y-%m-%d'),
+        'ExperienceEndDate': datetime.now().strftime('%Y-%m-%d'),
+        'CreatedStartDate': (
+            datetime.now() - timedelta(days=7)
+        ).strftime('%Y-%m-%d'),
+        'CreatedEndDate': datetime.now().strftime('%Y-%m-%d'),
+    }
+    save_context(defaults)
+    console.print("[green]✅ Default dates set in context[/green]")
 
 
 @system_app.command()
@@ -404,7 +465,7 @@ def query_api():
         )
         progress.update(main_task, description="Executing endpoint...")
         all_results = []
-        page = approved_params.get('Page', approved_params.get('page', 1))
+        page = int(approved_params.get('Page', approved_params.get('page', 1)))
         has_more = True
         while has_more:
             if 'Page' in approved_params:
@@ -434,13 +495,143 @@ def query_api():
                     has_more = False
             else:
                 break
+        
+        # Save successful command to history
+        save_command_to_history(selected_endpoint, approved_params, success=bool(all_results))
         progress.update(main_task, description="✅ Complete!")
     console.print(
         f"\n[green]Results ({len(all_results)} items):[green]"
     )
     console.print(json.dumps(all_results, indent=2))
-    if Confirm.ask("Save results to file?"):
+    save_prompt = "Save results to file? [y/n/clean]: "
+    resp = Prompt.ask(save_prompt, default="n").strip().lower()
+    if resp in ("y", "yes"):
         filename = Prompt.ask("Filename", default="results.json")
         with open(filename, 'w') as f:
             json.dump(all_results, f, indent=2)
         console.print(f"[green]✅ Saved to {filename}[/green]")
+    elif resp == "clean":
+        cleaned = clean_json_results(all_results)
+        console.print("[cyan]Showing cleaned results:[/cyan]")
+        console.print(json.dumps(cleaned, indent=2))
+        filename = Prompt.ask(
+            "Filename for cleaned results",
+            default="results_clean.json"
+        )
+        with open(filename, 'w') as f:
+            json.dump(cleaned, f, indent=2)
+        console.print(f"[green]✅ Cleaned results saved to {filename}[/green]")
+
+
+@system_app.command()
+def set_defaults():
+    """Set default parameters for common endpoints"""
+    set_default_dates()
+
+@system_app.command()
+def history(limit: int = 10):
+    """Show recent command history"""
+    recent = get_recent_commands(limit)
+    
+    if not recent:
+        console.print("[yellow]No command history found[/yellow]")
+        return
+    
+    table = Table(title="Recent Commands")
+    table.add_column("#", style="magenta", width=3)
+    table.add_column("Timestamp", style="blue", width=20)
+    table.add_column("Endpoint", style="cyan", width=30)
+    table.add_column("Parameters", style="white", width=50)
+    table.add_column("Status", style="green", width=10)
+    
+    for idx, cmd in enumerate(recent):
+        timestamp = cmd['timestamp'][:19].replace('T', ' ')  # Format timestamp
+        status = "✅" if cmd['success'] else "❌"
+        params_str = ", ".join([f"{k}={v}" for k, v in cmd['parameters'].items() if v])
+        if len(params_str) > 47:
+            params_str = params_str[:44] + "..."
+        
+        table.add_row(
+            str(idx),
+            timestamp,
+            cmd['endpoint'],
+            params_str,
+            status
+        )
+    
+    console.print(table)
+    console.print(f"\n[dim]Use 'replay <number>' to run a command again[/dim]")
+
+@system_app.command()
+def replay(index: int):
+    """Replay a command from history"""
+    cmd = replay_command(index)
+    
+    if not cmd:
+        console.print(f"[red]No command found at index {index}[/red]")
+        return
+    
+    console.print(f"[cyan]Replaying command:[/cyan] {cmd['endpoint']}")
+    console.print(f"[dim]Original timestamp:[/dim] {cmd['timestamp']}")
+    
+    # Show parameters
+    param_table = Table("Parameter", "Value")
+    for k, v in cmd['parameters'].items():
+        param_table.add_row(k, str(v))
+    console.print(param_table)
+    
+    if not Confirm.ask("Execute this command?"):
+        console.print("[yellow]Command cancelled[/yellow]")
+        return
+    
+    # Execute the command
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console
+    ) as progress:
+        main_task = progress.add_task(f"Executing {cmd['endpoint']}...", total=None)
+        response = execute_endpoint(cmd['endpoint'], cmd['parameters'])
+        
+        if response:
+            console.print(f"\n[green]✅ Command executed successfully[/green]")
+            console.print(json.dumps(response, indent=2))
+            
+            # Save to history again
+            save_command_to_history(cmd['endpoint'], cmd['parameters'], success=True)
+        else:
+            console.print(f"\n[red]❌ Command failed[/red]")
+            save_command_to_history(cmd['endpoint'], cmd['parameters'], success=False)
+
+def clean_json_results(results):
+    """Clean JSON results by replacing ID fields with labels from lookup files."""
+    # Load locations lookup
+    locations_path = os.path.join(
+        os.path.dirname(__file__), '../../locations.json'
+    )
+    try:
+        with open(locations_path, 'r') as f:
+            locations = {
+                str(loc['id']): loc['label']
+                for loc in json.load(f)
+            }
+    except Exception:
+        locations = {}
+
+    def clean_item(item):
+        if isinstance(item, dict):
+            new_item = {}
+            for k, v in item.items():
+                # Replace locationId with location label
+                if k == 'locationId' and str(v) in locations:
+                    new_item['location'] = locations[str(v)]
+                elif isinstance(v, (dict, list)):
+                    new_item[k] = clean_item(v)
+                else:
+                    new_item[k] = v
+            return new_item
+        elif isinstance(item, list):
+            return [clean_item(i) for i in item]
+        else:
+            return item
+    return clean_item(results)

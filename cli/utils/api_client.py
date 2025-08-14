@@ -1,63 +1,64 @@
-"""API client utilities with automatic retry on authentication failures."""
-import requests
-from typing import Dict, Any, Optional
-from cli.config import get_saved_token, auto_authenticate, settings
+"""
+Centralized API client factory and utilities.
+"""
+from typing import Optional
 import logging
+from api_client.partners_api_client.client import Client
+from api_client.partners_api_client.api.authentication import post_auth_token
+from api_client.partners_api_client.models import AuthenticationRequest
+from cli.config import settings
+from cli.state import state_manager
 
 logger = logging.getLogger(__name__)
 
 
-def make_api_request(
-    method: str, 
-    endpoint: str, 
-    params: Optional[Dict[str, Any]] = None,
-    json_data: Optional[Dict[str, Any]] = None,
-    retry_auth: bool = True
-) -> requests.Response:
+def get_client() -> Client:
     """
-    Make an API request with automatic retry on 401 errors.
-    
-    Args:
-        method: HTTP method (GET, POST, etc.)
-        endpoint: API endpoint path
-        params: Query parameters
-        json_data: JSON body data
-        retry_auth: Whether to retry with auto-authentication on 401
-        
-    Returns:
-        Response object
-        
-    Raises:
-        HTTPError: If request fails after retry
+    Get configured API client with authentication.
+    This is the single entry point for all API operations.
     """
-    url = f"{settings.api_base_url}{endpoint}"
-    headers = {
-        "Authorization": f"Bearer {get_saved_token()}",
-        "Content-Type": "application/json"
-    }
-    
-    response = requests.request(
-        method=method,
-        url=url,
-        headers=headers,
-        params=params,
-        json=json_data
+    token = state_manager.get_token()
+    client = Client(
+        base_url=settings.api_base_url,
+        headers={"Authorization": f"Bearer {token}"} if token else {}
     )
-    
-    if response.status_code == 401 and retry_auth:
-        logger.info("Received 401 error, attempting automatic re-authentication...")
-        if auto_authenticate():
-            # Retry the request with new token
-            headers["Authorization"] = f"Bearer {get_saved_token()}"
-            response = requests.request(
-                method=method,
-                url=url,
-                headers=headers,
-                params=params,
-                json=json_data
-            )
-        else:
-            logger.error("Automatic re-authentication failed. Please run 'auth get-token' manually.")
-    
-    response.raise_for_status()
-    return response
+    return client
+
+
+def authenticate_client(email: str, password: str) -> Optional[str]:
+    """
+    Authenticate and return access token using the API client.
+    """
+    client = Client(base_url=settings.api_base_url)
+    auth_request = AuthenticationRequest(
+        email=email,
+        password=password
+    )
+    try:
+        response = post_auth_token.sync(client=client, json_body=auth_request)
+        if response and hasattr(response, 'access_token'):
+            return response.access_token
+    except Exception as e:
+        logger.error(f"Authentication failed: {e}")
+    return None
+
+
+def refresh_token_if_needed() -> bool:
+    """
+    Automatically refresh token if expired.
+    Returns True if token is valid/refreshed, False if manual auth needed.
+    """
+    from datetime import datetime, timedelta
+    last_updated = state_manager.get_token_last_updated()
+    if not last_updated or (
+        datetime.utcnow() - last_updated > timedelta(hours=23)
+    ):
+        from cli.config import get_saved_credentials
+        email, password = get_saved_credentials()
+        if email and password:
+            token = authenticate_client(email, password)
+            if token:
+                state_manager.save_token(token)
+                return True
+        return False
+    return True
