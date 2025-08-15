@@ -6,40 +6,24 @@ on:
   pull_request_review_comment:
     types: [created]
   issues:
-    types: [opened, assigned, labeled]
-  pull_request:
-    types: [opened, labeled]
+    types: [opened, assigned]
   pull_request_review:
     types: [submitted]
-  workflow_dispatch:
-    inputs:
-      task:
-        description: 'Task for Claude'
-        required: false
-        default: 'Review and implement open issues'
-      force_run:
-        description: 'Force Claude to run even without triggers'
-        required: false
-        default: 'true'
-        type: boolean
 
 jobs:
   claude:
-    # Modified condition to handle workflow_dispatch better
     if: |
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'issue_comment' && (contains(github.event.comment.body, '@claude') || contains(github.event.comment.body, 'claude'))) ||
-      (github.event_name == 'pull_request_review_comment' && (contains(github.event.comment.body, '@claude') || contains(github.event.comment.body, 'claude'))) ||
-      (github.event_name == 'pull_request_review' && (contains(github.event.review.body, '@claude') || contains(github.event.review.body, 'claude'))) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.labels.*.name, 'claude') || contains(github.event.issue.body, '@claude') || contains(github.event.issue.body, 'claude'))) ||
-      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'claude'))
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
       issues: write
       id-token: write
-      actions: read
+      actions: read # Required for Claude to read CI results on PRs
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -50,38 +34,30 @@ jobs:
         id: claude
         uses: anthropics/claude-code-action@beta
         with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          
-          # Always use agent mode
-          mode: agent
+          anthropic_api_key: \${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
+          # This is an optional setting that allows Claude to read CI results on PRs
           additional_permissions: |
             actions: read
 
-          label_trigger: "claude"
-          trigger_phrase: "@claude"
+          # Optional: Specify model (defaults to Claude Sonnet 4, uncomment for Claude Opus 4.1)
+          model: "claude-opus-4-1-20250805"
 
-          allowed_tools: |
-            Bash(poetry install)
-            Bash(poetry run pytest*)
-            Bash(poetry run ruff*)
-            Bash(poetry run mypy*)
-            Bash(poetry add*)
-            Bash(git*)
-            Bash(python*)
-            Bash(mkdir*)
-            Bash(touch*)
-            Bash(echo*)
+          # Optional: Customize the trigger phrase (default: @claude)
+          # trigger_phrase: "/claude"
 
-          custom_instructions: |
-            ${{ github.event_name == 'workflow_dispatch' && format('Manual task: {0}', github.event.inputs.task) || '' }}
-            
-            You are working on the API Builder project. There are 4 agent roles:
-            - Agent 1 (Testing): Build test infrastructure on feature/testing-infrastructure
-            - Agent 2 (Parsers): Create parsers on feature/multi-format-parsers
-            - Agent 3 (Errors): Implement error handling on feature/error-handling
-            - Agent 4 (Docs): Write documentation on feature/documentation
-            
-            Check issue titles for [AGENT-X] to determine your role.
-            Follow the TODO.md file for specific tasks.
-            Create PRs to the develop branch when ready.
+          # Optional: Trigger when specific user is assigned to an issue
+          # assignee_trigger: "claude-bot"
+
+          # Optional: Allow Claude to run specific commands
+          # allowed_tools: "Bash(npm install),Bash(npm run build),Bash(npm run test:*),Bash(npm run lint:*)"
+
+          # Optional: Add custom instructions for Claude to customize its behavior for your project
+          # custom_instructions: |
+          #   Follow our coding standards
+          #   Ensure all new code has tests
+          #   Use TypeScript for new files
+
+          # Optional: Custom environment variables for Claude
+          # claude_env: |
+          #   NODE_ENV: test
