@@ -17,23 +17,29 @@ on:
         description: 'Task for Claude'
         required: false
         default: 'Review and implement open issues'
+      force_run:
+        description: 'Force Claude to run even without triggers'
+        required: false
+        default: 'true'
+        type: boolean
 
 jobs:
   claude:
+    # Modified condition to handle workflow_dispatch better
     if: |
+      github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'issue_comment' && (contains(github.event.comment.body, '@claude') || contains(github.event.comment.body, 'claude'))) ||
       (github.event_name == 'pull_request_review_comment' && (contains(github.event.comment.body, '@claude') || contains(github.event.comment.body, 'claude'))) ||
       (github.event_name == 'pull_request_review' && (contains(github.event.review.body, '@claude') || contains(github.event.review.body, 'claude'))) ||
       (github.event_name == 'issues' && (contains(github.event.issue.labels.*.name, 'claude') || contains(github.event.issue.body, '@claude') || contains(github.event.issue.body, 'claude'))) ||
-      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'claude')) ||
-      github.event_name == 'workflow_dispatch'
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'claude'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
       issues: write
       id-token: write
-      actions: read # Required for Claude to read CI results on PRs
+      actions: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -46,26 +52,19 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           
-          # Set to agent mode to handle workflow_dispatch events
-          mode: agent
+          # Force agent mode for workflow_dispatch
+          mode: ${{ github.event_name == 'workflow_dispatch' && 'agent' || 'default' }}
 
-          # This is an optional setting that allows Claude to read CI results on PRs
           additional_permissions: |
             actions: read
+            model: "claude-opus-4-1-20250805
 
-          # Optional: Specify model (defaults to Claude Sonnet 4, uncomment for Claude Opus 4.1)
-          # model: "claude-opus-4-1-20250805"
-
-          # Trigger when issues have the 'claude' label
           label_trigger: "claude"
-          
-          # Also trigger on @claude mentions
           trigger_phrase: "@claude"
 
-          # Optional: Trigger when specific user is assigned to an issue
-          # assignee_trigger: "claude-bot"
+          # Add a manual trigger for workflow_dispatch
+          manual_trigger: ${{ github.event_name == 'workflow_dispatch' }}
 
-          # Allow Claude to run Python/Poetry commands
           allowed_tools: |
             Bash(poetry install)
             Bash(poetry run pytest*)
@@ -78,8 +77,9 @@ jobs:
             Bash(touch*)
             Bash(echo*)
 
-          # Custom instructions for Claude agents
           custom_instructions: |
+            ${{ github.event_name == 'workflow_dispatch' && format('Manual task: {0}', github.event.inputs.task) || '' }}
+            
             You are working on the API Builder project. There are 4 agent roles:
             - Agent 1 (Testing): Build test infrastructure on feature/testing-infrastructure
             - Agent 2 (Parsers): Create parsers on feature/multi-format-parsers
@@ -89,7 +89,3 @@ jobs:
             Check issue titles for [AGENT-X] to determine your role.
             Follow the TODO.md file for specific tasks.
             Create PRs to the develop branch when ready.
-
-          # Optional: Custom environment variables for Claude
-          # claude_env: |
-          #   NODE_ENV: test
