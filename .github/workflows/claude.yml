@@ -52,18 +52,14 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           
-          # Force agent mode for workflow_dispatch
-          mode: ${{ github.event_name == 'workflow_dispatch' && 'agent' || 'default' }}
+          # Always use agent mode
+          mode: agent
 
           additional_permissions: |
             actions: read
-            model: "claude-opus-4-1-20250805
 
           label_trigger: "claude"
           trigger_phrase: "@claude"
-
-          # Add a manual trigger for workflow_dispatch
-          manual_trigger: ${{ github.event_name == 'workflow_dispatch' }}
 
           allowed_tools: |
             Bash(poetry install)
