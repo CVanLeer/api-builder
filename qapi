@@ -1,3 +1,0 @@
-#!/bin/bash
-# Shortcut to run the query-api CLI function
-python -m cli.main system query-api "$@" 
