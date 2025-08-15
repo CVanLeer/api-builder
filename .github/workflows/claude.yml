@@ -41,7 +41,10 @@ jobs:
         id: claude
         uses: anthropics/claude-code-action@beta
         with:
-          claude_code_oauth_token: \${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          
+          # Set to agent mode to handle workflow_dispatch events
+          mode: agent
 
           # This is an optional setting that allows Claude to read CI results on PRs
           additional_permissions: |
@@ -56,14 +59,30 @@ jobs:
           # Optional: Trigger when specific user is assigned to an issue
           # assignee_trigger: "claude-bot"
 
-          # Optional: Allow Claude to run specific commands
-          # allowed_tools: "Bash(npm install),Bash(npm run build),Bash(npm run test:*),Bash(npm run lint:*)"
+          # Allow Claude to run Python/Poetry commands
+          allowed_tools: |
+            Bash(poetry install)
+            Bash(poetry run pytest*)
+            Bash(poetry run ruff*)
+            Bash(poetry run mypy*)
+            Bash(poetry add*)
+            Bash(git*)
+            Bash(python*)
+            Bash(mkdir*)
+            Bash(touch*)
+            Bash(echo*)
 
-          # Optional: Add custom instructions for Claude to customize its behavior for your project
-          # custom_instructions: |
-          #   Follow our coding standards
-          #   Ensure all new code has tests
-          #   Use TypeScript for new files
+          # Custom instructions for Claude agents
+          custom_instructions: |
+            You are working on the API Builder project. There are 4 agent roles:
+            - Agent 1 (Testing): Build test infrastructure on feature/testing-infrastructure
+            - Agent 2 (Parsers): Create parsers on feature/multi-format-parsers
+            - Agent 3 (Errors): Implement error handling on feature/error-handling
+            - Agent 4 (Docs): Write documentation on feature/documentation
+            
+            Check issue titles for [AGENT-X] to determine your role.
+            Follow the TODO.md file for specific tasks.
+            Create PRs to the develop branch when ready.
 
           # Optional: Custom environment variables for Claude
           # claude_env: |
