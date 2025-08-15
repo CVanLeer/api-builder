@@ -1,0 +1,62 @@
+name: Claude Debug
+
+on:
+  workflow_dispatch:
+  
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Test Token
+        env:
+          TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          echo "Token exists: $(if [ -n "$TOKEN" ]; then echo "YES"; else echo "NO"; fi)"
+          echo "Token length: ${#TOKEN}"
+          echo "Token starts with: ${TOKEN:0:3}..."
+          
+      - name: Create Test File
+        run: |
+          echo "# Test file created by workflow" > test-workflow.md
+          echo "Timestamp: $(date)" >> test-workflow.md
+          ls -la test-workflow.md
+          
+      - name: Try Claude with Minimal Config
+        id: claude
+        uses: anthropics/claude-code-action@beta
+        continue-on-error: true
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          mode: agent
+          custom_instructions: |
+            Create a file called claude-was-here.txt with the content "Claude successfully ran at $(date)"
+            
+      - name: Check Results
+        if: always()
+        run: |
+          echo "Claude step outcome: ${{ steps.claude.outcome }}"
+          echo "Files in directory:"
+          ls -la
+          echo "Checking for Claude's file:"
+          if [ -f claude-was-here.txt ]; then
+            echo "SUCCESS: Claude created the file!"
+            cat claude-was-here.txt
+          else
+            echo "FAILED: Claude did not create the file"
+          fi
+          
+      - name: Manual Test Comment
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Create a test issue comment to verify permissions
+          gh issue comment 1 --body "🤖 Debug workflow ran at $(date). Claude step outcome: ${{ steps.claude.outcome }}"
