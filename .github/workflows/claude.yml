@@ -9,6 +9,12 @@ on:
     types: [opened, assigned]
   pull_request_review:
     types: [submitted]
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Task for Claude'
+        required: false
+        default: 'Review and implement open issues'
 
 jobs:
   claude:
@@ -16,7 +22,8 @@ jobs:
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude'))) ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -40,8 +47,8 @@ jobs:
           additional_permissions: |
             actions: read
 
-          Optional: Specify model (defaults to Claude Sonnet 4, uncomment for Claude Opus 4.1)
-          model: "claude-opus-4-1-20250805"
+          # Optional: Specify model (defaults to Claude Sonnet 4, uncomment for Claude Opus 4.1)
+          # model: "claude-opus-4-1-20250805"
 
           # Optional: Customize the trigger phrase (default: @claude)
           # trigger_phrase: "/claude"
