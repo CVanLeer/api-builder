@@ -1,0 +1,169 @@
+{
+  "merchants": {
+    "success": {
+      "data": [
+        {
+          "merchantId": "merch-001",
+          "name": "Coffee Shop Central",
+          "email": "contact@coffeeshop.com",
+          "status": "active",
+          "createdAt": "2024-01-15T10:00:00Z",
+          "locations": [
+            {"locationId": "loc-001", "name": "Downtown"},
+            {"locationId": "loc-002", "name": "Uptown"}
+          ]
+        },
+        {
+          "merchantId": "merch-002",
+          "name": "Pizza Palace",
+          "email": "info@pizzapalace.com",
+          "status": "active",
+          "createdAt": "2024-02-01T14:30:00Z",
+          "locations": []
+        }
+      ],
+      "hasNextPage": true,
+      "totalCount": 50
+    },
+    "empty": {
+      "data": [],
+      "hasNextPage": false,
+      "totalCount": 0
+    },
+    "error": {
+      "error": "Unauthorized",
+      "message": "Invalid or expired token",
+      "statusCode": 401
+    }
+  },
+  "locations": {
+    "success": {
+      "data": [
+        {
+          "locationId": "loc-001",
+          "merchantId": "merch-001",
+          "name": "Downtown Branch",
+          "address": "123 Main Street, City, ST 12345",
+          "phone": "555-0100",
+          "isActive": true,
+          "coordinates": {
+            "latitude": 40.7128,
+            "longitude": -74.0060
+          }
+        },
+        {
+          "locationId": "loc-002",
+          "merchantId": "merch-001",
+          "name": "Uptown Branch",
+          "address": "456 Oak Avenue, City, ST 12346",
+          "phone": "555-0200",
+          "isActive": true,
+          "coordinates": {
+            "latitude": 40.7580,
+            "longitude": -73.9855
+          }
+        }
+      ],
+      "hasNextPage": false
+    }
+  },
+  "orders": {
+    "success": {
+      "data": [
+        {
+          "orderId": "ord-001",
+          "locationId": "loc-001",
+          "merchantId": "merch-001",
+          "customerId": "cust-001",
+          "orderDate": "2024-11-01T09:15:00Z",
+          "totalAmount": 45.99,
+          "status": "completed",
+          "items": [
+            {
+              "itemId": "item-001",
+              "name": "Cappuccino",
+              "quantity": 2,
+              "unitPrice": 4.50
+            },
+            {
+              "itemId": "item-002",
+              "name": "Croissant",
+              "quantity": 1,
+              "unitPrice": 3.99
+            }
+          ]
+        },
+        {
+          "orderId": "ord-002",
+          "locationId": "loc-001",
+          "merchantId": "merch-001",
+          "customerId": "cust-002",
+          "orderDate": "2024-11-01T10:30:00Z",
+          "totalAmount": 12.50,
+          "status": "pending",
+          "items": []
+        }
+      ],
+      "pagination": {
+        "page": 1,
+        "pageSize": 50,
+        "totalPages": 10,
+        "totalCount": 500
+      }
+    }
+  },
+  "auth": {
+    "token_success": {
+      "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
+      "token_type": "Bearer",
+      "expires_in": 3600,
+      "refresh_token": "refresh_token_test_value"
+    },
+    "token_error": {
+      "error": "invalid_grant",
+      "error_description": "Invalid email or password"
+    }
+  },
+  "users": {
+    "success": {
+      "data": [
+        {
+          "userId": "user-001",
+          "email": "john.doe@example.com",
+          "firstName": "John",
+          "lastName": "Doe",
+          "role": "admin",
+          "isActive": true
+        },
+        {
+          "userId": "user-002",
+          "email": "jane.smith@example.com",
+          "firstName": "Jane",
+          "lastName": "Smith",
+          "role": "user",
+          "isActive": true
+        }
+      ]
+    }
+  },
+  "groups": {
+    "success": {
+      "data": [
+        {
+          "groupId": "grp-001",
+          "name": "Administrators",
+          "description": "System administrators",
+          "memberCount": 5,
+          "createdAt": "2024-01-01T00:00:00Z"
+        },
+        {
+          "groupId": "grp-002",
+          "name": "Operators",
+          "description": "System operators",
+          "memberCount": 15,
+          "createdAt": "2024-01-15T00:00:00Z"
+        }
+      ]
+    }
+  }
+}
