@@ -30,7 +30,24 @@ settings = Settings()
 
 
 def get_or_create_encryption_key() -> bytes:
-    """Get or create an encryption key for storing credentials."""
+    """
+    Get or create a Fernet encryption key for credential security.
+
+    This function retrieves an existing encryption key from the state manager,
+    or generates a new one if none exists. The key is used to securely encrypt
+    and store user passwords locally.
+
+    Returns:
+        bytes: A Fernet-compatible encryption key
+
+    Example:
+        >>> key = get_or_create_encryption_key()
+        >>> len(key)
+        32
+
+    Note:
+        The key is automatically saved to persistent storage when generated.
+    """
     key_str = state_manager.get_encryption_key()
     if key_str:
         return base64.urlsafe_b64decode(key_str)
@@ -72,7 +89,25 @@ def get_token_last_updated() -> Optional[datetime]:
 
 
 def save_credentials(email: str, password: str):
-    """Save email and encrypted password."""
+    """
+    Securely save user credentials for automatic authentication.
+
+    This function encrypts the password using Fernet symmetric encryption
+    and stores both email and encrypted password in the state manager.
+
+    Args:
+        email: User's email address
+        password: User's plain-text password (will be encrypted)
+
+    Example:
+        >>> save_credentials('user@example.com', 'secret123')
+        >>> # Password is encrypted and stored securely
+
+    Note:
+        - Password is immediately encrypted before storage
+        - Original password is not retained in memory
+        - Email is stored in plain text
+    """
     encrypted_password = encrypt_password(password)
     state_manager.save_credentials(email, encrypted_password)
 
@@ -93,7 +128,32 @@ def get_saved_credentials() -> tuple[str, str]:
 
 
 def auto_authenticate() -> bool:
-    """Attempt to automatically authenticate using saved credentials."""
+    """
+    Attempt automatic authentication using stored credentials.
+
+    This function retrieves saved email/password credentials, decrypts
+    the password, and attempts to authenticate with the API. If successful,
+    it saves the new token for future use.
+
+    Returns:
+        bool: True if authentication succeeded, False otherwise
+
+    Raises:
+        requests.RequestException: If network request fails
+        Exception: If decryption or token processing fails
+
+    Example:
+        >>> success = auto_authenticate()
+        >>> if success:
+        ...     print("Authenticated successfully")
+        ... else:
+        ...     print("Need manual authentication")
+
+    Note:
+        - Logs authentication attempts and failures
+        - Returns False if no saved credentials exist
+        - Updates token timestamp on successful authentication
+    """
     import requests
     
     email, password = get_saved_credentials()

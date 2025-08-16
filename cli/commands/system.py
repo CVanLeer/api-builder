@@ -15,7 +15,10 @@ from datetime import datetime, timedelta
 import os
 from cli.utils.api_client import get_client
 
-system_app = typer.Typer()
+system_app = typer.Typer(
+    help="⚙️ System commands for API exploration and workflow management",
+    rich_markup_mode="rich"
+)
 console = Console()
 ENDPOINTS_ROOT = Path("cli/endpoints/gettattle")
 
@@ -24,7 +27,27 @@ _dependency_cache = {}
 
 
 def get_dependency_analyzer() -> DependencyAnalyzer:
-    """Get or create a cached dependency analyzer"""
+    """
+    Get or create a cached dependency analyzer instance.
+
+    This function implements a singleton pattern to ensure only one
+    DependencyAnalyzer instance is created per session. The analyzer
+    processes the OpenAPI specification to build dependency graphs.
+
+    Returns:
+        DependencyAnalyzer: Cached analyzer instance with processed
+            parameter dependencies
+
+    Raises:
+        FileNotFoundError: If openapi/openai.json is not found
+        json.JSONDecodeError: If the OpenAPI spec is invalid JSON
+
+    Example:
+        >>> analyzer = get_dependency_analyzer()
+        >>> providers = analyzer.find_parameter_providers('merchantId')
+        >>> print(providers)
+        ['/merchants', '/merchant-details']
+    """
     if 'analyzer' not in _dependency_cache:
         spec_path = Path("openapi/openai.json")
         with open(spec_path) as f:
@@ -35,14 +58,52 @@ def get_dependency_analyzer() -> DependencyAnalyzer:
 
 
 def get_parameter_detector() -> ParameterDetector:
-    """Get or create a cached parameter detector"""
+    """
+    Get or create a cached parameter detector instance.
+
+    This function provides a singleton ParameterDetector that analyzes
+    parameter names and types to provide intelligent type detection
+    and value suggestions.
+
+    Returns:
+        ParameterDetector: Cached detector instance for parameter analysis
+
+    Example:
+        >>> detector = get_parameter_detector()
+        >>> param_info = detector.detect_parameter_type('merchantId', {})
+        >>> print(param_info.type)
+        ParameterType.FOREIGN_KEY
+    """
     if 'detector' not in _dependency_cache:
         _dependency_cache['detector'] = ParameterDetector()
     return _dependency_cache['detector']
 
 
 def execute_endpoint(endpoint: str, params: dict) -> dict | None:
-    """Execute an endpoint using the API client."""
+    """
+    Execute an API endpoint with the generated client.
+
+    This function maps endpoint paths to the appropriate API client methods
+    and executes them with the provided parameters. It handles errors
+    gracefully and provides user feedback.
+
+    Args:
+        endpoint: The API endpoint path (e.g., '/merchants', '/locations')
+        params: Dictionary of parameters to pass to the endpoint
+
+    Returns:
+        dict | None: The API response data, or None if the call failed
+
+    Example:
+        >>> result = execute_endpoint('/merchants', {'page': 1})
+        >>> print(result['data'][0]['name'])
+        'Example Merchant'
+
+    Note:
+        - Unmapped endpoints will show an error message
+        - Network errors are caught and displayed to the user
+        - All API calls use the stored authentication token
+    """
     try:
         client = get_client()
         # Map endpoint paths to API client methods
@@ -58,9 +119,13 @@ def execute_endpoint(endpoint: str, params: dict) -> dict | None:
             console.print(
                 f"[red]❌ Endpoint {endpoint} not implemented in client mapping[/red]"
             )
+            console.print(
+                "[yellow]💡 Try regenerating the API client: python scripts/regen_client.py[/yellow]"
+            )
             return None
     except Exception as e:
         console.print(f"[red]❌ Error calling {endpoint}: {e}[/red]")
+        console.print("[yellow]💡 Check your authentication: python cli/main.py auth get-token[/yellow]")
         return None
 
 
@@ -149,7 +214,8 @@ def resolve_parameter_with_dependency(
     
     # Check for circular dependency
     if param_name in _resolving_stack:
-        console.print(f"[yellow]⚠️  Circular dependency detected for {param_name}, prompting manually[/yellow]")
+        console.print(f"[yellow]⚠️ Circular dependency detected for {param_name}[/yellow]")
+        console.print(f"[dim]💡 This happens when endpoints reference each other. Providing manual input.[/dim]")
         manual_value = Prompt.ask(f"Enter value for {param_name}")
         save_context({param_name: manual_value})
         return manual_value
@@ -197,9 +263,11 @@ def resolve_parameter_with_dependency(
                 progress.update(
                     task_id,
                     description=(
-                        f"⚠️  No provider found for {param_name}"
+                        f"⚠️ No provider found for {param_name}"
                     )
                 )
+            console.print(f"[yellow]⚠️ No automatic provider found for '{param_name}'[/yellow]")
+            console.print(f"[dim]💡 This parameter needs to be provided manually.[/dim]")
             manual_value = Prompt.ask(f"Enter value for {param_name}")
             save_context({param_name: manual_value})
             return manual_value
@@ -289,7 +357,13 @@ def set_default_dates():
 
 @system_app.command()
 def query_api():
-    """Execute an API endpoint with automatic dependency resolution"""
+    """
+    🔍 Interactive API explorer with automatic dependency resolution.
+    
+    This command shows all available endpoints, lets you select one to call,
+    automatically resolves parameter dependencies, and executes the API call.
+    Perfect for discovering what data is available in your API.
+    """
     analyzer = get_dependency_analyzer()
     # Build endpoints dict from analyzer.paths
     endpoints = {}
@@ -525,12 +599,23 @@ def query_api():
 
 @system_app.command()
 def set_defaults():
-    """Set default parameters for common endpoints"""
+    """
+    📅 Set default date ranges and common parameters.
+    
+    Pre-populates context with default values for date parameters like
+    startDate, endDate, etc. Saves time when making repeated API calls
+    with time-series data.
+    """
     set_default_dates()
 
 @system_app.command()
-def history(limit: int = 10):
-    """Show recent command history"""
+def history(limit: int = typer.Option(10, help="Number of recent commands to show")):
+    """
+    📜 Show recent command history with status and parameters.
+    
+    Displays a table of recent API calls with their parameters and success status.
+    Use this to track what you've called and find commands to replay.
+    """
     recent = get_recent_commands(limit)
     
     if not recent:
@@ -563,8 +648,14 @@ def history(limit: int = 10):
     console.print(f"\n[dim]Use 'replay <number>' to run a command again[/dim]")
 
 @system_app.command()
-def replay(index: int):
-    """Replay a command from history"""
+def replay(index: int = typer.Argument(help="Index number from history command")):
+    """
+    🔄 Replay a previous command from history.
+    
+    Re-executes a command from your history with the same parameters.
+    Useful for repeating successful API calls or testing consistency.
+    Use 'history' command first to see available commands.
+    """
     cmd = replay_command(index)
     
     if not cmd:
