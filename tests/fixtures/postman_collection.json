@@ -1,0 +1,115 @@
+{
+    "info": {
+        "name": "Sample API Collection",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+        "version": "1.0.0",
+        "description": "A sample Postman collection for testing"
+    },
+    "auth": {
+        "type": "bearer",
+        "bearer": [
+            {
+                "key": "token",
+                "value": "{{token}}",
+                "type": "string"
+            }
+        ]
+    },
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "https://api.example.com"
+        },
+        {
+            "key": "version",
+            "value": "v1"
+        }
+    ],
+    "item": [
+        {
+            "name": "Users",
+            "item": [
+                {
+                    "name": "Get Users",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json",
+                                "type": "text"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/{{version}}/users?limit=10&offset=0",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "{{version}}",
+                                "users"
+                            ],
+                            "query": [
+                                {
+                                    "key": "limit",
+                                    "value": "10",
+                                    "description": "Maximum number of users to return"
+                                },
+                                {
+                                    "key": "offset",
+                                    "value": "0",
+                                    "description": "Number of users to skip"
+                                }
+                            ]
+                        }
+                    },
+                    "description": "Retrieve a list of users"
+                },
+                {
+                    "name": "Create User",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json",
+                                "type": "text"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/{{version}}/users",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "{{version}}",
+                                "users"
+                            ]
+                        }
+                    },
+                    "description": "Create a new user"
+                }
+            ]
+        },
+        {
+            "name": "Get Health Check",
+            "request": {
+                "method": "GET",
+                "url": {
+                    "raw": "{{base_url}}/health",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "health"
+                    ]
+                }
+            },
+            "description": "Health check endpoint"
+        }
+    ]
+}

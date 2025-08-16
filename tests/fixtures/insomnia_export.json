@@ -1,0 +1,88 @@
+{
+    "_type": "export",
+    "__export_format": 4,
+    "__export_date": "2024-01-15T12:00:00.000Z",
+    "resources": [
+        {
+            "_id": "wrk_1",
+            "_type": "workspace",
+            "name": "Sample API Workspace",
+            "description": "A sample Insomnia workspace for testing"
+        },
+        {
+            "_id": "env_1",
+            "_type": "environment",
+            "name": "Base Environment",
+            "data": {
+                "base_url": "https://api.example.com",
+                "api_key": "secret-key"
+            }
+        },
+        {
+            "_id": "fld_1",
+            "_type": "request_group",
+            "name": "Users",
+            "parentId": "wrk_1"
+        },
+        {
+            "_id": "req_1",
+            "_type": "request",
+            "name": "Get Users",
+            "method": "GET",
+            "url": "{{ _.base_url }}/users",
+            "parameters": [
+                {
+                    "name": "limit",
+                    "value": "10",
+                    "description": "Number of users to return"
+                },
+                {
+                    "name": "offset",
+                    "value": "0",
+                    "description": "Number of users to skip"
+                }
+            ],
+            "headers": [
+                {
+                    "name": "Accept",
+                    "value": "application/json"
+                }
+            ],
+            "parentId": "fld_1",
+            "authentication": {
+                "type": "bearer",
+                "token": "{{ _.api_key }}"
+            }
+        },
+        {
+            "_id": "req_2",
+            "_type": "request",
+            "name": "Create User",
+            "method": "POST",
+            "url": "{{ _.base_url }}/users",
+            "headers": [
+                {
+                    "name": "Content-Type",
+                    "value": "application/json"
+                }
+            ],
+            "body": {
+                "mimeType": "application/json",
+                "text": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"jane@example.com\"\n}"
+            },
+            "parentId": "fld_1",
+            "authentication": {
+                "type": "bearer",
+                "token": "{{ _.api_key }}"
+            }
+        },
+        {
+            "_id": "req_3",
+            "_type": "request",
+            "name": "Health Check",
+            "method": "GET",
+            "url": "{{ _.base_url }}/health",
+            "parentId": "wrk_1"
+        }
+    ]
+}
