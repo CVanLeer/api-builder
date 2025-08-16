@@ -1,4 +1,4 @@
-name: Claude Code
+name: Claude Code Action Official
 
 on:
   issue_comment:
@@ -6,7 +6,7 @@ on:
   pull_request_review_comment:
     types: [created]
   issues:
-    types: [opened, assigned]
+    types: [opened, assigned, labeled]
   pull_request_review:
     types: [submitted]
 
@@ -30,12 +30,12 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Run Claude Code
+      - name: Run Claude Code Action Official
         id: claude
         uses: anthropics/claude-code-action@beta
         with:
-          anthropic_api_key: \${{ secrets.ANTHROPIC_API_KEY }}
-
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          
           # This is an optional setting that allows Claude to read CI results on PRs
           additional_permissions: |
             actions: read
